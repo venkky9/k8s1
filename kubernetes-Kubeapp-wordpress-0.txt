@@ -1,0 +1,192 @@
+#Author: Bala
+# Email: bakuppus@kubelancer.com
+# Describtion: Setup AWS Infrastructure for Kubernetes Master and Worker  Node
+# OS: Ubuntu 18
+# Cloud: AWS
+
+# Setup AWS infrastructure
+###########################
+
+1. Create IAM Master role and IAM Worker role
+
+IAM Master role
+
+Go to the IAM > Policies, click Create policy, into the JSON add a new policy description
+
+policy name: kubernetes-cluster-master-iam-policy and save it
+
+
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "autoscaling:DescribeAutoScalingGroups",
+                "autoscaling:DescribeLaunchConfigurations",
+                "autoscaling:DescribeTags",
+                "ec2:DescribeInstances",
+                "ec2:DescribeRegions",
+                "ec2:DescribeRouteTables",
+                "ec2:DescribeSecurityGroups",
+                "ec2:DescribeSubnets",
+                "ec2:DescribeVolumes",
+                "ec2:CreateSecurityGroup",
+                "ec2:CreateTags",
+                "ec2:CreateVolume",
+                "ec2:ModifyInstanceAttribute",
+                "ec2:ModifyVolume",
+                "ec2:AttachVolume",
+                "ec2:AuthorizeSecurityGroupIngress",
+                "ec2:CreateRoute",
+                "ec2:DeleteRoute",
+                "ec2:DeleteSecurityGroup",
+                "ec2:DeleteVolume",
+                "ec2:DetachVolume",
+                "ec2:RevokeSecurityGroupIngress",
+                "ec2:DescribeVpcs",
+                "elasticloadbalancing:AddTags",
+                "elasticloadbalancing:AttachLoadBalancerToSubnets",
+                "elasticloadbalancing:ApplySecurityGroupsToLoadBalancer",
+                "elasticloadbalancing:CreateLoadBalancer",
+                "elasticloadbalancing:CreateLoadBalancerPolicy",
+                "elasticloadbalancing:CreateLoadBalancerListeners",
+                "elasticloadbalancing:ConfigureHealthCheck",
+                "elasticloadbalancing:DeleteLoadBalancer",
+                "elasticloadbalancing:DeleteLoadBalancerListeners",
+                "elasticloadbalancing:DescribeLoadBalancers",
+                "elasticloadbalancing:DescribeLoadBalancerAttributes",
+                "elasticloadbalancing:DetachLoadBalancerFromSubnets",
+                "elasticloadbalancing:DeregisterInstancesFromLoadBalancer",
+                "elasticloadbalancing:ModifyLoadBalancerAttributes",
+                "elasticloadbalancing:RegisterInstancesWithLoadBalancer",
+                "elasticloadbalancing:SetLoadBalancerPoliciesForBackendServer",
+                "elasticloadbalancing:AddTags",
+                "elasticloadbalancing:CreateListener",
+                "elasticloadbalancing:CreateTargetGroup",
+                "elasticloadbalancing:DeleteListener",
+                "elasticloadbalancing:DeleteTargetGroup",
+                "elasticloadbalancing:DescribeListeners",
+                "elasticloadbalancing:DescribeLoadBalancerPolicies",
+                "elasticloadbalancing:DescribeTargetGroups",
+                "elasticloadbalancing:DescribeTargetHealth",
+                "elasticloadbalancing:ModifyListener",
+                "elasticloadbalancing:ModifyTargetGroup",
+                "elasticloadbalancing:RegisterTargets",
+                "elasticloadbalancing:SetLoadBalancerPoliciesOfListener",
+                "iam:CreateServiceLinkedRole",
+                "kms:DescribeKey"
+            ],
+            "Resource": [
+                "*"
+            ]
+        }
+    ]
+}
+
+2. Go to the Roles, create a role using the EC2 type:
+
+Click on the Permissions, find and attach the policy kubernetes-cluster-master-iam-policy  added above:
+
+Role name: kubernetes-cluster-master-iam-role and save it
+
+3. IAM Worker role
+
+Go to the IAM > Policies, click Create policy, into the JSON add a new policy description
+
+policy name: kubernetes-cluster-worker-iam-policy and save it
+
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DescribeInstances",
+                "ec2:DescribeRegions",
+                "ecr:GetAuthorizationToken",
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:GetRepositoryPolicy",
+                "ecr:DescribeRepositories",
+                "ecr:ListImages",
+                "ecr:BatchGetImage"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+
+4. Go to the Roles, create a role using the EC2 type:
+
+Click on the Permissions, find and attach the policy kubernetes-cluster-worker-iam-policy  added above:
+
+Role name: kubernetes-cluster-worker-iam-role and save it
+
+5. Provision EC2 servers
+
+
+- EC2 server
+- OS: Ubuntu 18
+# Label the EC2 instances (tagging) with
+- tag:  key=kubernetes.io/cluster/kubernetes    value=owned
+#  Note: Since its Single Master Node, Master and Worker Nodes should be in same Zone in AWS cloud
+- zone: us-east-1a
+- Security Group:  
+
+Kubernetes Ports : Open listed ports on AWS – Security Group 
+Master node(s):
+TCP     6443*       Kubernetes API Server
+TCP     2379-2380   etcd server client API
+TCP     10250       Kubelet API
+TCP     10251       kube-scheduler
+TCP     10252       kube-controller-manager
+TCP     10255       Read-Only Kubelet API
+TCP     10259       Schedular
+TCP     10257       Controller 
+All Traffic All Allow 172.0.0.0/8
+
+Worker nodes (minions): 
+TCP     10250       Kubelet API
+TCP     10255       Read-Only Kubelet API
+TCP     30000-32767 NodePort Services
+
+
+
+
+## For Cluster config Ref 
+
+AWS Cloud cloud-provider ClusterConfiguration
+########################################
+
+root@ip-172-31-87-129:~# cat /etc/kubernetes/aws.yaml 
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: ClusterConfiguration
+networking:
+  serviceSubnet: "10.0.0.0/16"
+  podSubnet: "10.100.0.0/24"
+apiServer:
+  extraArgs:
+    cloud-provider: "aws"
+controllerManager:
+  extraArgs:
+    cloud-provider: "aws"
+root@ip-172-31-87-129:~# 
+
+
+
+root@ip-172-31-88-20:~# cat  /etc/kubernetes/node.yaml 
+---
+apiVersion: kubeadm.k8s.io/v1beta1
+kind: JoinConfiguration
+discovery:
+  bootstrapToken:
+    token: "3yeyro.3h7uq3v5d1i1l3ic"
+    apiServerEndpoint: "172.31.87.129:6443"
+    caCertHashes:
+      - "sha256:b6988478aa2218c6ebe91bb68ba8365520bb6cba43adb797308340e51ed8bd9f"
+nodeRegistration:
+  name: ip-172-31-88-20.ec2.internal
+  kubeletExtraArgs:
+    cloud-provider: aws
+root@ip-172-31-88-20:~# 
